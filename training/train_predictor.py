@@ -76,11 +76,37 @@ class TrajectoryDataset(Dataset):
         # Convert to tensors
         attention_tensors = {}
         for layer_idx, attn_list in attention_patterns.items():
-            attention_tensors[layer_idx] = torch.stack(attn_list)
+            # Pad per-timestep attention matrices to the largest square in this trajectory
+            # Each entry is [seq_len, seq_len] and seq_len can vary by timestep
+            max_len = max(a.shape[0] for a in attn_list)
+            padded = []
+            for a in attn_list:
+                if a.shape[0] == max_len:
+                    padded.append(a)
+                else:
+                    pad_rows = max_len - a.shape[0]
+                    # pad to [max_len, max_len]
+                    pad_tensor = torch.zeros(max_len, max_len, dtype=a.dtype, device=a.device)
+                    pad_tensor[:a.shape[0], :a.shape[1]] = a
+                    padded.append(pad_tensor)
+            attention_tensors[layer_idx] = torch.stack(padded)
             
         hidden_tensors = {}
         for layer_idx, hidden_list in hidden_states.items():
-            hidden_tensors[layer_idx] = torch.stack(hidden_list)
+            # Pad per-timestep hidden states to largest seq_len in this trajectory for this layer
+            # Each entry is [seq_len, hidden_dim]
+            max_len = max(h.shape[0] for h in hidden_list)
+            hidden_dim = hidden_list[0].shape[1]
+            padded = []
+            for h in hidden_list:
+                if h.shape[0] == max_len:
+                    padded.append(h)
+                else:
+                    pad_rows = max_len - h.shape[0]
+                    pad_tensor = torch.zeros(max_len, hidden_dim, dtype=h.dtype, device=h.device)
+                    pad_tensor[:h.shape[0], :h.shape[1]] = h
+                    padded.append(pad_tensor)
+            hidden_tensors[layer_idx] = torch.stack(padded)
             
         token_prob_tensors = torch.stack(token_probs)
         
@@ -584,40 +610,83 @@ class ASANTrainingPipeline:
             all_attention_layers.update(item['attention_patterns'].keys())
             all_hidden_layers.update(item['hidden_states'].keys())
             
-        # Pad attention patterns
+        # Pad attention patterns (pad time and spatial dims per layer across batch)
         for layer_idx in all_attention_layers:
             layer_tensors = []
+            # Determine target spatial size for this layer across batch
+            target_spatial = 0
+            for item in batch:
+                if layer_idx in item['attention_patterns']:
+                    attn_tensor = item['attention_patterns'][layer_idx]  # [T, S, S]
+                    target_spatial = max(target_spatial, attn_tensor.shape[1])
+            if target_spatial == 0:
+                target_spatial = 10
             for item in batch:
                 if layer_idx in item['attention_patterns']:
                     attn_tensor = item['attention_patterns'][layer_idx]
-                    # Pad to max length
+                    # Pad time dimension to max_length
                     if attn_tensor.size(0) < max_length:
-                        padding = torch.zeros(max_length - attn_tensor.size(0), *attn_tensor.shape[1:])
-                        attn_tensor = torch.cat([attn_tensor, padding], dim=0)
+                        pad_time = torch.zeros(max_length - attn_tensor.size(0), attn_tensor.size(1), attn_tensor.size(2))
+                        attn_tensor = torch.cat([attn_tensor, pad_time], dim=0)
+                    # Pad spatial dims to target_spatial
+                    if attn_tensor.size(1) < target_spatial:
+                        s = attn_tensor.size(1)
+                        pad_spatial = torch.zeros(max_length, target_spatial, target_spatial)
+                        pad_spatial[:, :s, :s] = attn_tensor
+                        attn_tensor = pad_spatial
                     layer_tensors.append(attn_tensor)
                 else:
                     # Create dummy tensor
-                    dummy_tensor = torch.zeros(max_length, 10, 10)  # Assume 10x10 attention
+                    dummy_tensor = torch.zeros(max_length, target_spatial, target_spatial)
                     layer_tensors.append(dummy_tensor)
-                    
             collated_batch['attention_patterns'][layer_idx] = torch.stack(layer_tensors)
             
-        # Pad hidden states
+        # Pad hidden states (pad time and spatial/hidden dims across batch)
         for layer_idx in all_hidden_layers:
             layer_tensors = []
+            target_seq_len = 0
+            target_hidden_dim = 0
             for item in batch:
                 if layer_idx in item['hidden_states']:
                     hidden_tensor = item['hidden_states'][layer_idx]
-                    # Pad to max length
-                    if hidden_tensor.size(0) < max_length:
-                        padding = torch.zeros(max_length - hidden_tensor.size(0), *hidden_tensor.shape[1:])
-                        hidden_tensor = torch.cat([hidden_tensor, padding], dim=0)
+                    # hidden_tensor may be [T, S, H] or [T, H]
+                    if hidden_tensor.dim() == 3:
+                        target_seq_len = max(target_seq_len, hidden_tensor.shape[1])
+                        target_hidden_dim = max(target_hidden_dim, hidden_tensor.shape[2])
+                    else:
+                        target_hidden_dim = max(target_hidden_dim, hidden_tensor.shape[1])
+            if target_hidden_dim == 0:
+                target_hidden_dim = 768
+            if target_seq_len == 0:
+                target_seq_len = 10
+            for item in batch:
+                if layer_idx in item['hidden_states']:
+                    hidden_tensor = item['hidden_states'][layer_idx]
+                    if hidden_tensor.dim() == 2:
+                        # [T, H] -> pad time then hidden
+                        if hidden_tensor.size(0) < max_length:
+                            pad_time = torch.zeros(max_length - hidden_tensor.size(0), hidden_tensor.size(1))
+                            hidden_tensor = torch.cat([hidden_tensor, pad_time], dim=0)
+                        if hidden_tensor.size(1) < target_hidden_dim:
+                            h = hidden_tensor.size(1)
+                            pad_hidden = torch.zeros(max_length, target_hidden_dim)
+                            pad_hidden[:, :h] = hidden_tensor
+                            hidden_tensor = pad_hidden
+                    else:
+                        # [T, S, H] -> pad time, seq_len, hidden_dim
+                        T, S, H = hidden_tensor.shape
+                        if T < max_length:
+                            pad_time = torch.zeros(max_length - T, S, H)
+                            hidden_tensor = torch.cat([hidden_tensor, pad_time], dim=0)
+                        if S < target_seq_len or H < target_hidden_dim:
+                            pad_full = torch.zeros(max_length, target_seq_len, target_hidden_dim)
+                            pad_full[:hidden_tensor.shape[0], :S, :H] = hidden_tensor
+                            hidden_tensor = pad_full
                     layer_tensors.append(hidden_tensor)
                 else:
-                    # Create dummy tensor
-                    dummy_tensor = torch.zeros(max_length, 768)  # Assume 768 hidden dim
+                    # Create dummy tensor [T, S, H]
+                    dummy_tensor = torch.zeros(max_length, target_seq_len, target_hidden_dim)
                     layer_tensors.append(dummy_tensor)
-                    
             collated_batch['hidden_states'][layer_idx] = torch.stack(layer_tensors)
             
         # Pad token probabilities

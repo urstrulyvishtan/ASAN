@@ -2,7 +2,7 @@
 torch>=2.0.0
 transformers>=4.30.0
 numpy>=1.24.0
-pywt>=1.4.1  # PyWavelets
+PyWavelets>=1.4.1  # Wavelet transforms
 matplotlib>=3.7.0
 plotly>=5.14.0
 dash>=2.11.0  # For dashboard
@@ -26,4 +26,4 @@ pytest>=7.3.0
 # Additional dependencies for ASAN
 seaborn>=0.12.0
 dash-bootstrap-components>=1.4.0
-plotly-dash>=0.1.0
+# Remove invalid package name; Dash already includes Plotly integration

@@ -20,7 +20,7 @@ class ASANConfig:
     """Configuration for ASAN predictor"""
     # Input dimensions
     attention_dim: int = 6 * 12  # 6 features per layer * 12 layers
-    hidden_state_dim: int = 8 * 12  # 8 features per layer * 12 layers
+    hidden_state_dim: int = 13 * 12  # 13 features per layer * 12 layers (matches encoder)
     token_prob_dim: int = 7  # Token probability features
     
     # Model architecture
