@@ -12,7 +12,10 @@ from typing import Dict, List, Tuple, Optional, Any
 import numpy as np
 from dataclasses import dataclass
 
-from ..models.asan_predictor import ASANPredictor
+try:
+    from models.asan_predictor import ASANPredictor
+except ImportError:
+    from ..models.asan_predictor import ASANPredictor
 
 
 @dataclass

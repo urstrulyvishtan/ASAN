@@ -285,9 +285,23 @@ class ASANPredictor(nn.Module):
         """
         temporal_predictions = []
         
+        if len(token_probs) == 0:
+            # Return default prediction for empty trajectory
+            return [{'harm_probability': torch.tensor(0.5), 'confidence': torch.tensor(0.5)}]
+        
         for timestep in range(len(token_probs)):
+            # Slice trajectory up to current timestep
+            partial_attention = {layer: attns[:timestep+1] for layer, attns in attention_patterns.items()}
+            partial_hidden = {layer: hiddens[:timestep+1] for layer, hiddens in hidden_states.items()}
+            partial_probs = token_probs[:timestep+1]
+            
+            # Skip if no timesteps
+            if len(partial_probs) == 0:
+                temporal_predictions.append({'harm_probability': torch.tensor(0.5), 'confidence': torch.tensor(0.5)})
+                continue
+            
             prediction = self.forward(
-                attention_patterns, hidden_states, token_probs, current_timestep=timestep
+                partial_attention, partial_hidden, partial_probs
             )
             temporal_predictions.append(prediction)
             

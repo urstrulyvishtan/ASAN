@@ -5,12 +5,17 @@ Single unified interface that combines ASAN prediction, steering, and RL-trained
 """
 
 import torch
-from typing import Dict, List, Optional, Any
+from typing import Dict, List, Optional, Any, Tuple
 from dataclasses import dataclass
 
-from ..models.asan_predictor import ASANPredictor
-from ..alignment.spectral_steering import SpectralSteeringController, SteeringConfig
-from ..alignment.steering_strategies import SteeringStrategyType, create_steering_strategy, StrategyConfig
+try:
+    from models.asan_predictor import ASANPredictor
+    from alignment.spectral_steering import SpectralSteeringController, SteeringConfig
+    from alignment.steering_strategies import SteeringStrategyType, create_steering_strategy, StrategyConfig
+except ImportError:
+    from ..models.asan_predictor import ASANPredictor
+    from ..alignment.spectral_steering import SpectralSteeringController, SteeringConfig
+    from ..alignment.steering_strategies import SteeringStrategyType, create_steering_strategy, StrategyConfig
 
 
 @dataclass

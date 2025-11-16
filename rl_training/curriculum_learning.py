@@ -6,7 +6,7 @@ Progressive difficulty in safety scenarios to improve learning efficiency.
 
 import torch
 import numpy as np
-from typing import Dict, List, Optional, Tuple
+from typing import Dict, List, Optional, Tuple, Any
 from dataclasses import dataclass
 from enum import Enum
 

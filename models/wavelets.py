@@ -85,7 +85,7 @@ class TemporalWaveletTransform(nn.Module):
             # Apply wavelet transform to each sample in batch
             batch_coeffs = []
             for b in range(batch_size):
-                signal = feature_series[b].cpu().numpy()
+                signal = feature_series[b].detach().cpu().numpy()  # Detach to allow numpy conversion even if requires_grad
                 
                 try:
                     # Perform wavelet decomposition
@@ -102,10 +102,15 @@ class TemporalWaveletTransform(nn.Module):
                     batch_coeffs.append(dummy_coeffs)
                     
             # Stack batch coefficients
-            batch_coeffs = torch.stack([torch.tensor(coeffs) for coeffs in batch_coeffs])
+            # Each element in batch_coeffs is a list of [levels+1] arrays, each array is [timesteps]
+            # Convert each to tensor: [levels+1, timesteps]
+            # Then stack along batch dimension: [batch, levels+1, timesteps]
+            batch_coeffs_tensors = [torch.tensor(coeffs, dtype=torch.float32) for coeffs in batch_coeffs]
+            batch_coeffs_stacked = torch.stack(batch_coeffs_tensors, dim=0)  # [batch, levels+1, timesteps]
             
-            # Store coefficients for this feature
-            for level_idx, level_coeffs in enumerate(batch_coeffs.transpose(1, 2)):
+            # Extract each level for this feature, preserving batch dimension
+            for level_idx in range(batch_coeffs_stacked.shape[1]):
+                level_coeffs = batch_coeffs_stacked[:, level_idx, :]  # [batch, timesteps]
                 level_name = f'level_{level_idx}'
                 if level_name not in coefficients:
                     coefficients[level_name] = []

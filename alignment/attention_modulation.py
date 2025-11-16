@@ -8,10 +8,13 @@ model from attending to patterns that lead to harmful outputs.
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
-from typing import Dict, List, Tuple, Optional
+from typing import Dict, List, Tuple, Optional, Any
 import numpy as np
 
-from ..models.asan_predictor import ASANPredictor
+try:
+    from models.asan_predictor import ASANPredictor
+except ImportError:
+    from ..models.asan_predictor import ASANPredictor
 
 
 class AttentionModulator:

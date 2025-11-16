@@ -92,18 +92,28 @@ class TrajectoryEncoder(nn.Module):
             token_features = self._extract_token_features(token_probs[t])
             
             # Encode each modality
-            attn_encoded = self.attention_encoder(attention_features)
-            hidden_encoded = self.hidden_state_encoder(hidden_features)
-            token_encoded = self.token_prob_encoder(token_features)
+            # Add batch dimension if needed (encoders expect 1D input, output 1D)
+            attn_encoded = self.attention_encoder(attention_features.unsqueeze(0)).squeeze(0)  # [256]
+            hidden_encoded = self.hidden_state_encoder(hidden_features.unsqueeze(0)).squeeze(0)  # [256]
+            token_encoded = self.token_prob_encoder(token_features.unsqueeze(0)).squeeze(0)  # [256]
             
-            # Fuse modalities
-            fused = torch.cat([attn_encoded, hidden_encoded, token_encoded], dim=-1)
-            encoded_timestep = self.fusion(fused)
+            # Fuse modalities (add batch dim for concatenation)
+            fused = torch.cat([
+                attn_encoded.unsqueeze(0), 
+                hidden_encoded.unsqueeze(0), 
+                token_encoded.unsqueeze(0)
+            ], dim=-1)  # [1, 3*encoding_dim]
+            encoded_timestep = self.fusion(fused).squeeze(0)  # [encoding_dim]
             
             encoded_timesteps.append(encoded_timestep)
-            
-        # Stack timesteps
-        encoded_trajectory = torch.stack(encoded_timesteps, dim=1)  # [batch, timesteps, encoding_dim]
+        
+        # Stack timesteps (add batch dimension)
+        # Each encoded_timestep is [encoding_dim], we want [batch=1, timesteps, encoding_dim]
+        if len(encoded_timesteps) == 0:
+            # Handle empty trajectory case
+            encoded_trajectory = torch.zeros(1, 1, self.encoding_dim)
+        else:
+            encoded_trajectory = torch.stack(encoded_timesteps, dim=0).unsqueeze(0)  # [1, timesteps, encoding_dim]
         
         # Apply temporal convolution
         encoded_trajectory = encoded_trajectory.transpose(1, 2)  # [batch, encoding_dim, timesteps]

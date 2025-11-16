@@ -8,11 +8,15 @@ guiding model toward safer representations.
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
-from typing import Dict, List, Tuple, Optional
+from typing import Dict, List, Tuple, Optional, Any
 import numpy as np
 
-from ..models.asan_predictor import ASANPredictor
-from .spectral_steering import SpectralSteeringController
+try:
+    from models.asan_predictor import ASANPredictor
+    from alignment.spectral_steering import SpectralSteeringController
+except ImportError:
+    from ..models.asan_predictor import ASANPredictor
+    from .spectral_steering import SpectralSteeringController
 
 
 class HiddenStateCorrector:

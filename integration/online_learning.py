@@ -11,9 +11,14 @@ from dataclasses import dataclass
 from collections import deque
 import numpy as np
 
-from ..models.asan_predictor import ASANPredictor
-from ..alignment.spectral_steering import SpectralSteeringController
-from .feedback_loop import FeedbackLoop
+try:
+    from models.asan_predictor import ASANPredictor
+    from alignment.spectral_steering import SpectralSteeringController
+    from integration.feedback_loop import FeedbackLoop
+except ImportError:
+    from ..models.asan_predictor import ASANPredictor
+    from ..alignment.spectral_steering import SpectralSteeringController
+    from .feedback_loop import FeedbackLoop
 
 
 @dataclass
@@ -151,23 +156,26 @@ class OnlineLearningSystem:
         self.asan_predictor.train()
         self.asan_optimizer.zero_grad()
         
-        with torch.no_grad():
-            prediction = self.asan_predictor(
-                trajectory['attention_patterns'],
-                trajectory['hidden_states'],
-                trajectory['token_probs']
-            )
+        # Compute prediction (no torch.no_grad so gradients can flow)
+        prediction = self.asan_predictor(
+            trajectory['attention_patterns'],
+            trajectory['hidden_states'],
+            trajectory['token_probs']
+        )
         
         # Compute error (simplified - would use proper loss function)
-        target = torch.tensor(1.0 if actual_label == 'harmful' else 0.0)
+        target = torch.tensor(1.0 if actual_label == 'harmful' else 0.0, 
+                              dtype=prediction['harm_probability'].dtype,
+                              device=prediction['harm_probability'].device)
         predicted = prediction['harm_probability']
         
         loss = nn.functional.mse_loss(predicted, target)
         
         # Gradient update (with small step to avoid catastrophic forgetting)
-        loss.backward()
-        torch.nn.utils.clip_grad_norm_(self.asan_predictor.parameters(), 1.0)
-        self.asan_optimizer.step()
+        if loss.requires_grad:
+            loss.backward()
+            torch.nn.utils.clip_grad_norm_(self.asan_predictor.parameters(), 1.0)
+            self.asan_optimizer.step()
         
         self.asan_predictor.eval()
     

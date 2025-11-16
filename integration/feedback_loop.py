@@ -11,8 +11,12 @@ from dataclasses import dataclass
 from collections import deque
 import numpy as np
 
-from ..models.asan_predictor import ASANPredictor
-from ..alignment.spectral_steering import SpectralSteeringController
+try:
+    from models.asan_predictor import ASANPredictor
+    from alignment.spectral_steering import SpectralSteeringController
+except ImportError:
+    from ..models.asan_predictor import ASANPredictor
+    from ..alignment.spectral_steering import SpectralSteeringController
 
 
 @dataclass

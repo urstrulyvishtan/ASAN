@@ -12,8 +12,12 @@ from dataclasses import dataclass
 from enum import Enum
 import random
 
-from ..models.asan_predictor import ASANPredictor
-from .asan_reward_model import ASANRewardModel
+try:
+    from models.asan_predictor import ASANPredictor
+    from rl_training.asan_reward_model import ASANRewardModel
+except ImportError:
+    from ..models.asan_predictor import ASANPredictor
+    from .asan_reward_model import ASANRewardModel
 
 
 class UserType(Enum):
