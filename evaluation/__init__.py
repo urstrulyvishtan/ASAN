@@ -14,6 +14,9 @@ from .metrics import (
     comprehensive_evaluation,
     EvaluationLogger,
 )
+from .steering_metrics import SteeringMetrics, SteeringMetricsConfig
+from .long_horizon_metrics import LongHorizonMetrics, LongHorizonMetricsConfig
+from .alignment_benchmarks import AlignmentBenchmarks, BenchmarkConfig
 
 __all__ = [
     'EvaluationConfig',
@@ -26,4 +29,10 @@ __all__ = [
     'plot_evaluation_results',
     'comprehensive_evaluation',
     'EvaluationLogger',
+    'SteeringMetrics',
+    'SteeringMetricsConfig',
+    'LongHorizonMetrics',
+    'LongHorizonMetricsConfig',
+    'AlignmentBenchmarks',
+    'BenchmarkConfig',
 ]
